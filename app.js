@@ -52,41 +52,12 @@ function candidates(){let a=[];for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++)if(fr
 function placeGhosts(){let rand=rng(level*73+132),spots=candidates(),used=new Set();ghosts=[];for(let i=0;i<settings.ghosts&&spots.length;i++){let idx=Math.floor(rand()*spots.length),p=spots.splice(idx,1)[0];if(used.has(p.x+','+p.y))continue;used.add(p.x+','+p.y);ghosts.push({...p,dir:Math.floor(rand()*4),clock:rand()*600})}}
 function resetLevel(){grid=makeMaze(level);player={x:1,y:1};goal={x:13,y:9};hearts=3;won=false;paused=false;pressed.clear();mouseTarget=null;placeGhosts();updateHUD();draw();updateMusic();$('overlay').classList.add('hidden');$('nextBtn').disabled=true}
 function updateHUD(){let t=themes[level];$('levelTitle').textContent=t[3]+' 關卡 '+(level+1)+'－'+t[0];$('progress').textContent='⭐ 完成 '+completed.length+' / 15';$('hearts').textContent='❤️'.repeat(hearts)+'🤍'.repeat(3-hearts);$('boardWrap').style.setProperty('--sky',t[1]);$('boardWrap').dataset.decor=t[4]+' '+t[4]+' '+t[4]}
-// Hand-drawn vector scenery: each stage has its own palette, terrain and motifs.
-const scenery=[
- ['#d7f9b8','#f7e5b3','#3d9d46','#1e6b37','🌲','🌼'],
- ['#ffe0ef','#fff0db','#d97cb0','#a74382','🌸','🌷'],
- ['#91eaff','#ffedb5','#48c5b8','#168c9d','🐚','🌴'],
- ['#ffe1a0','#ffdb92','#c48c50','#93643b','🌵','☀️'],
- ['#d5f3ff','#f5fcff','#8dc9e9','#5e9dc9','❄️','⛄'],
- ['#d5c4ff','#f5e4d2','#9362ac','#68427e','🍄','🌿'],
- ['#d5f6ff','#fff2d2','#a67bdf','#6b4fbc','🌈','🎈'],
- ['#c4d8f0','#eee2c8','#8595b3','#59657e','🛡️','🏰'],
- ['#6de2ec','#c8f7ed','#3c9caf','#24768c','🪸','🐠'],
- ['#ffb39a','#f8d2ae','#aa6556','#793d3d','🔥','🌋'],
- ['#353c85','#b7b4dc','#7775ba','#484b86','✨','🌙'],
- ['#ffe1f3','#fff0d9','#ef9cbe','#ca679d','🍭','🧁'],
- ['#303a78','#aab6d3','#6877a9','#414e85','🪐','🚀'],
- ['#d5d9aa','#eee2b7','#8c9a6e','#657351','🗿','🌿'],
- ['#fff0b4','#fff3c6','#e5b64d','#ae7a1e','👑','💎']
-];
-// Scene rendering: distinct illustrated horizon, themed obstacles, textured paths.
-function scenicBackground(t){const w=900,h=660;
- const bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,t[0]);bg.addColorStop(1,t[1]);ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
- const rand=rng(9301+level*231);ctx.save();
- // layered landscape behind the grid: mountains, waves, clouds or night sky
- for(let k=0;k<3;k++){ctx.fillStyle=level===10||level===12?'#ffffff18':level===8?'#1f90b540':'#ffffff38';ctx.beginPath();ctx.moveTo(0,180+k*130);for(let x=0;x<=900;x+=25){let y=180+k*130+Math.sin(x*.013+k)*35+Math.cos(x*.031+k*2)*14;ctx.lineTo(x,y)}ctx.lineTo(900,660);ctx.lineTo(0,660);ctx.fill()}
- for(let i=0;i<45;i++){let x=rand()*900,y=rand()*660;ctx.globalAlpha=.13+rand()*.2;ctx.font=(16+rand()*24)+'px system-ui';ctx.textAlign='center';ctx.fillText(level===10||level===12?'✦':level===8?'◌':level===11?'✿':level===4?'❄':'●',x,y)}ctx.globalAlpha=1;ctx.restore();}
-function tileWall(x,y,t){let px=x*CELL,py=y*CELL;
- const g=ctx.createLinearGradient(px,py,px,py+CELL);g.addColorStop(0,t[2]);g.addColorStop(.65,t[3]);g.addColorStop(1,t[3]);ctx.fillStyle=g;ctx.fillRect(px,py,CELL,CELL);
- // connected top highlights and dark bevels
- ctx.fillStyle='#ffffff50';ctx.fillRect(px+2,py+2,CELL-4,8);ctx.fillStyle='#071d2940';ctx.fillRect(px+2,py+CELL-9,CELL-4,7);
- if(level===7||level===13||level===14){ctx.strokeStyle='#ffffff60';ctx.lineWidth=2;ctx.strokeRect(px+4,py+4,52,52);ctx.beginPath();ctx.moveTo(px+30,py+5);ctx.lineTo(px+30,py+27);ctx.moveTo(px+4,py+30);ctx.lineTo(px+56,py+30);ctx.stroke()}
- else if(level===11){ctx.fillStyle='#fff8ff90';for(let j=0;j<4;j++){ctx.beginPath();ctx.arc(px+10+j*13,py+15+(j%2)*20,3,0,7);ctx.fill()}}
- else if(level===4){ctx.fillStyle='#ffffff8a';ctx.beginPath();ctx.ellipse(px+30,py+7,25,7,0,0,7);ctx.fill()}
- else if(level===8){ctx.strokeStyle='#9efaff80';ctx.lineWidth=2;ctx.beginPath();ctx.arc(px+30,py+30,18,0,7);ctx.stroke()}
- else{ctx.fillStyle='#ffffff20';for(let j=0;j<3;j++){ctx.beginPath();ctx.arc(px+10+j*19,py+15+(j%2)*21,5,0,7);ctx.fill()}}
-}
+// Semi-realistic textured environments with offline material assets.
+const textures=Array.from({length:15},(_,i)=>Object.fromEntries(['wall','path'].map(k=>{const im=new Image();im.src=`textures/${k}-${String(i+1).padStart(2,'0')}.webp`;im.onload=()=>draw();return [k,im]})));
+function scenicBackground(){let t=themes[level],g=ctx.createLinearGradient(0,0,900,660);g.addColorStop(0,t[1]);g.addColorStop(1,t[2]);ctx.fillStyle=g;ctx.fillRect(0,0,900,660)}
+function texturedTile(x,y,wall){let px=x*CELL,py=y*CELL,im=textures[level][wall?'wall':'path'];if(im.complete&&im.naturalWidth){let sx=(x*37+y*61+level*11)%180,sy=(y*43+x*29)%180;ctx.drawImage(im,sx,sy,70,70,px,py,CELL,CELL)}else{ctx.fillStyle=wall?themes[level][3]:themes[level][2];ctx.fillRect(px,py,CELL,CELL)}
+if(wall){let g=ctx.createLinearGradient(px,py,px,py+20);g.addColorStop(0,'#ffffffa0');g.addColorStop(1,'#ffffff00');ctx.fillStyle=g;ctx.fillRect(px+2,py+2,56,20);ctx.fillStyle='#071b2460';ctx.fillRect(px+2,py+52,58,8);ctx.fillRect(px+52,py+4,8,56);ctx.strokeStyle='#ffffff85';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(px+3,py+54);ctx.lineTo(px+3,py+3);ctx.lineTo(px+56,py+3);ctx.stroke()}
+else{if(grid[y-1]?.[x]===1){let g=ctx.createLinearGradient(px,py,px,py+22);g.addColorStop(0,'#091b235e');g.addColorStop(1,'#091b2300');ctx.fillStyle=g;ctx.fillRect(px,py,60,22)}if(grid[y]?.[x-1]===1){let g=ctx.createLinearGradient(px,py,px+22,py);g.addColorStop(0,'#091b2349');g.addColorStop(1,'#091b2300');ctx.fillStyle=g;ctx.fillRect(px,py,22,60)}}}
 function drawAvatar(x,y){let cx=(x+.5)*CELL,cy=(y+.5)*CELL,kind=settings.character;
  ctx.save();ctx.shadowColor='#143f68';ctx.shadowBlur=7;ctx.shadowOffsetY=3;
  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx,cy,28,0,7);ctx.fill();ctx.shadowBlur=0;ctx.shadowOffsetY=0;
@@ -101,11 +72,7 @@ function drawAvatar(x,y){let cx=(x+.5)*CELL,cy=(y+.5)*CELL,kind=settings.charact
  if(kind===0||kind===1){ctx.fillStyle=kind===0?'#1679d9':'#d84085';ctx.beginPath();ctx.ellipse(cx,cy-19,19,8,0,Math.PI,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillRect(cx-20,cy-19,40,4)}
  ctx.fillStyle='#132a42';for(let q of [-7,7]){ctx.beginPath();ctx.ellipse(cx+q,cy-7,2.8,4,0,0,7);ctx.fill()}
  ctx.strokeStyle='#bd5a5b';ctx.lineWidth=2;ctx.beginPath();ctx.arc(cx,cy-2,5,.15,Math.PI-.15);ctx.stroke();ctx.restore();}
-function draw(){const t=scenery[level];ctx.clearRect(0,0,900,660);scenicBackground(t);ctx.textAlign='center';ctx.textBaseline='middle';
- for(let y=0;y<H;y++)for(let x=0;x<W;x++){
- let px=x*CELL,py=y*CELL;if(grid[y][x]){tileWall(x,y,t);if((x*19+y*11+level*3)%13===0){ctx.font='27px system-ui';ctx.fillText(t[4],px+30,py+30)}}
- else{ctx.fillStyle=level===10||level===12?'#f5eaffcc':level===8?'#d7ffffd9':'#fff4d4df';ctx.fillRect(px+1,py+1,58,58);ctx.strokeStyle='#ffffff7a';ctx.lineWidth=1;ctx.strokeRect(px+3,py+3,54,54);if((x*7+y*17+level*5)%17===0){ctx.font='20px system-ui';ctx.fillText(t[5],px+30,py+30)}}
- }
+function draw(){ctx.clearRect(0,0,900,660);scenicBackground();ctx.textAlign='center';ctx.textBaseline='middle';for(let y=0;y<H;y++)for(let x=0;x<W;x++)texturedTile(x,y,!!grid[y][x]);
  if(settings.hint){let path=shortest(player,goal);ctx.strokeStyle='#ffae00';ctx.lineWidth=7;ctx.lineCap='round';ctx.setLineDash([6,12]);ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo((p.x+.5)*CELL,(p.y+.5)*CELL):ctx.moveTo((p.x+.5)*CELL,(p.y+.5)*CELL));ctx.stroke();ctx.setLineDash([])}
  ctx.shadowColor='#ffc400';ctx.shadowBlur=18;ctx.fillStyle='#fff1a3';ctx.beginPath();ctx.arc((goal.x+.5)*CELL,(goal.y+.5)*CELL,26,0,7);ctx.fill();ctx.shadowBlur=0;ctx.font='38px system-ui';ctx.fillText('🚩',(goal.x+.5)*CELL,(goal.y+.5)*CELL);
  ghosts.forEach(g=>{ctx.shadowColor='#6536bf';ctx.shadowBlur=8;ctx.font='39px system-ui';ctx.fillText('👻',(g.x+.5)*CELL,(g.y+.5)*CELL);ctx.shadowBlur=0});drawAvatar(player.x,player.y);
