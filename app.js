@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id),canvas=$('maze'),ctx=canvas.getContext('
 const themes=[
 ['綠色森林','#a9e9fc','#e7c989','#398d2f','🌳','🌲🌼🌳','forest'],['櫻花花園','#ffd7ef','#fff1d7','#dc7aa4','🌸','🌸🌷🌸','garden'],['陽光海灘','#83e6ff','#ffe5a0','#5daac2','🏖️','🐚🌴☀️','beach'],['沙漠探險','#ffe3a1','#f6d28d','#bf8b4b','🏜️','🌵☀️🏜️','desert'],['冰雪世界','#c6edff','#e7f7ff','#75b8df','❄️','❄️⛄🧊','ice'],['蘑菇森林','#d2c5ff','#fff0cf','#9d5d9d','🍄','🍄🌿🍄','mushroom'],['彩虹樂園','#a9efff','#fff2cc','#a77bd8','🌈','🌈🎈⭐','rainbow'],['石磚城堡','#c5d5f5','#eee1c6','#777c9d','🏰','🏰🛡️🏰','castle'],['海底世界','#5ad4f0','#bcecf1','#378cae','🐠','🐠🪸🐚','ocean'],['火山冒險','#ffb2a1','#f2c4a1','#92564e','🌋','🌋🔥🪨','volcano'],['星空夜晚','#424c91','#e0d5e8','#6564a2','🌙','🌙✨⭐','night'],['糖果王國','#ffd1e8','#ffe4c5','#ef8aaf','🍬','🍭🍬🧁','candy'],['太空基地','#384477','#c8c9dd','#686ca0','🚀','🪐🚀✨','space'],['神秘古城','#b9c49a','#e2d6a9','#7b8560','🏯','🏯🗿🌿','ancient'],['黃金終極迷宮','#ffe6a3','#fff1bc','#d1a331','🏆','🏆👑⭐','gold']];
 const chars=[['小男孩','👦'],['小女孩','👧'],['小兔子','🐰'],['小熊','🐻'],['小貓','🐱'],['小恐龍','🦖']];
-const defaults={mode:'keys',ghosts:3,ghostSpeed:'slow',collision:'start',music:true,musicVolume:35,sfx:true,voice:true,hint:false,step:false,moveSpeed:'medium',character:0};
+const defaults={mode:'keys',ghosts:3,ghostSpeed:'slow',collision:'start',music:true,musicVolume:65,sfx:true,voice:true,hint:false,step:false,moveSpeed:'medium',character:0};
 let settings={...defaults},completed=[],level=0,grid=[],player={x:1,y:1},goal={x:13,y:9},ghosts=[],hearts=3,playing=false,won=false,paused=false,pressed=new Set(),lastStep=0,lastFrame=0,raf=0,dragging=false,mouseTarget=null,audio=null,musicTimer=0,musicNote=0,toastTimer=0;
 try{settings={...defaults,...JSON.parse(localStorage.getItem('maze12-settings')||'{}')};completed=JSON.parse(localStorage.getItem('maze12-completed')||'[]')}catch{}
 const save=()=>{try{localStorage.setItem('maze12-settings',JSON.stringify(settings));localStorage.setItem('maze12-completed',JSON.stringify(completed))}catch{}};
@@ -13,8 +13,21 @@ function tone(freq=500,duration=.13,volume=.05,type='sine'){if(!audio)return;try
 function effect(kind){if(!settings.sfx)return;initAudio();if(kind==='win'){[523,659,784,1046].forEach((n,i)=>setTimeout(()=>tone(n,.22,.085),i*140))}else if(kind==='hit')tone(180,.24,.06,'triangle');else tone(480,.09,.035)}
 function speak(t){if(!settings.voice||!('speechSynthesis'in window))return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='zh-TW';u.rate=.92;speechSynthesis.speak(u)}catch{}}
 const scales=[[0,2,4,7,9],[0,2,5,7,9],[0,3,5,7,10],[0,2,4,7,11],[0,2,5,9,11]];
-function musicTick(){if(!playing||paused||won||!settings.music||!audio)return;const t=level,notes=scales[t%5],idx=(musicNote+Math.floor(t/3))%notes.length,oct=(musicNote%8===7)?12:0;const freq=220*Math.pow(2,(notes[idx]+oct+t%3*2)/12);tone(freq,.20,settings.musicVolume/100*0.035,'sine');musicNote++}
-function updateMusic(){clearInterval(musicTimer);if(playing&&settings.music){initAudio();musicTimer=setInterval(musicTick,420)}}
+// Original synthesized music: fifteen variations, fully offline and license-free.
+const melodies=[
+[0,4,7,9,7,4,2,4],[0,2,4,7,9,7,4,2],[0,4,9,7,4,2,0,2],
+[0,3,5,7,5,3,0,3],[0,5,7,12,9,7,5,2],[0,3,7,10,7,3,5,7],
+[0,4,7,12,11,7,4,2],[0,2,5,7,10,7,5,2],[0,5,9,7,5,2,4,0],
+[0,3,7,8,7,3,2,0],[0,4,7,11,9,7,4,2],[0,4,9,12,9,7,4,2],
+[0,2,7,9,12,9,7,5],[0,3,5,10,8,5,3,2],[0,4,7,12,11,9,7,12]];
+function musicTick(){if(!playing||paused||won||!settings.music||!audio||audio.state!=='running')return;
+ const melody=melodies[level],n=melody[musicNote%melody.length],root=level%3===0?261.63:level%3===1?293.66:220;
+ const vol=settings.musicVolume/100;const f=root*Math.pow(2,n/12);
+ tone(f,.31,.10*vol,level%4===0?'triangle':level%4===1?'sine':'triangle');
+ if(musicNote%4===0){tone(root/2,.57,.075*vol,'sine');tone(root*Math.pow(2,7/12)/2,.56,.035*vol,'sine')}
+ musicNote++;
+}
+function updateMusic(){clearInterval(musicTimer);if(playing&&settings.music){initAudio();musicTick();musicTimer=setInterval(musicTick,settings.ghostSpeed==='fast'?290:360)}}
 // Maze generation: randomized spanning tree + numerous extra connections, guaranteeing alternate routes.
 function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function makeMaze(index){let rand=rng(7841+index*11191),g=Array.from({length:H},()=>Array(W).fill(1));const nodes=[];for(let y=1;y<H-1;y+=2)for(let x=1;x<W-1;x+=2)nodes.push([x,y]);let seen=new Set(['1,1']),stack=[[1,1]];g[1][1]=0;while(stack.length){let [x,y]=stack[stack.length-1],opts=[[2,0],[-2,0],[0,2],[0,-2]].map(([dx,dy])=>[x+dx,y+dy,dx,dy]).filter(([nx,ny])=>nx>0&&ny>0&&nx<W-1&&ny<H-1&&!seen.has(nx+','+ny));if(!opts.length){stack.pop();continue}let [nx,ny,dx,dy]=opts[Math.floor(rand()*opts.length)];g[y+dy/2][x+dx/2]=0;g[ny][nx]=0;seen.add(nx+','+ny);stack.push([nx,ny])}
@@ -29,9 +42,49 @@ function candidates(){let a=[];for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++)if(fr
 function placeGhosts(){let rand=rng(level*73+132),spots=candidates(),used=new Set();ghosts=[];for(let i=0;i<settings.ghosts&&spots.length;i++){let idx=Math.floor(rand()*spots.length),p=spots.splice(idx,1)[0];if(used.has(p.x+','+p.y))continue;used.add(p.x+','+p.y);ghosts.push({...p,dir:Math.floor(rand()*4),clock:rand()*600})}}
 function resetLevel(){grid=makeMaze(level);player={x:1,y:1};goal={x:13,y:9};hearts=3;won=false;paused=false;pressed.clear();mouseTarget=null;placeGhosts();updateHUD();draw();updateMusic();$('overlay').classList.add('hidden');$('nextBtn').disabled=true}
 function updateHUD(){let t=themes[level];$('levelTitle').textContent=t[3]+' 關卡 '+(level+1)+'－'+t[0];$('progress').textContent='⭐ 完成 '+completed.length+' / 15';$('hearts').textContent='❤️'.repeat(hearts)+'🤍'.repeat(3-hearts);$('boardWrap').style.setProperty('--sky',t[1]);$('boardWrap').dataset.decor=t[4]+' '+t[4]+' '+t[4]}
-function draw(){const t=themes[level];ctx.clearRect(0,0,900,660);ctx.fillStyle=t[2];ctx.fillRect(0,0,900,660);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='25px system-ui';for(let y=0;y<H;y++)for(let x=0;x<W;x++){const px=x*CELL,py=y*CELL;if(grid[y][x]){ctx.fillStyle=t[3];ctx.fillRect(px,py,CELL,CELL);ctx.fillStyle='#ffffff25';ctx.fillRect(px+3,py+3,CELL-6,9);if((x*17+y*13+level*3)%7===0){ctx.font='24px system-ui';ctx.fillText(t[4],px+30,py+31)}}else{ctx.fillStyle=(x+y)%2?'#ffffff1c':'#00000007';ctx.fillRect(px,py,CELL,CELL);if((x*5+y*11+level)%17===0){ctx.font='15px system-ui';ctx.fillText('✦',px+30,py+30)}}}
-if(settings.hint){let path=shortest(player,goal);ctx.strokeStyle='#ffae00bb';ctx.lineWidth=8;ctx.lineCap='round';ctx.setLineDash([7,13]);ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo((p.x+.5)*CELL,(p.y+.5)*CELL):ctx.moveTo((p.x+.5)*CELL,(p.y+.5)*CELL));ctx.stroke();ctx.setLineDash([])}
-ctx.fillStyle='#ffe75c';ctx.beginPath();ctx.arc((goal.x+.5)*CELL,(goal.y+.5)*CELL,26,0,Math.PI*2);ctx.fill();ctx.font='40px system-ui';ctx.fillText('🚩',(goal.x+.5)*CELL,(goal.y+.5)*CELL);ghosts.forEach(g=>{ctx.font='39px system-ui';ctx.fillText('👻',(g.x+.5)*CELL,(g.y+.5)*CELL)});ctx.fillStyle='#fff8';ctx.beginPath();ctx.arc((player.x+.5)*CELL,(player.y+.5)*CELL,25,0,Math.PI*2);ctx.fill();ctx.font='42px system-ui';ctx.fillText(chars[settings.character][1],(player.x+.5)*CELL,(player.y+.5)*CELL)}
+// Hand-drawn vector scenery: each stage has its own palette, terrain and motifs.
+const scenery=[
+ ['#d7f9b8','#f7e5b3','#3d9d46','#1e6b37','🌲','🌼'],
+ ['#ffe0ef','#fff0db','#d97cb0','#a74382','🌸','🌷'],
+ ['#91eaff','#ffedb5','#48c5b8','#168c9d','🐚','🌴'],
+ ['#ffe1a0','#ffdb92','#c48c50','#93643b','🌵','☀️'],
+ ['#d5f3ff','#f5fcff','#8dc9e9','#5e9dc9','❄️','⛄'],
+ ['#d5c4ff','#f5e4d2','#9362ac','#68427e','🍄','🌿'],
+ ['#d5f6ff','#fff2d2','#a67bdf','#6b4fbc','🌈','🎈'],
+ ['#c4d8f0','#eee2c8','#8595b3','#59657e','🛡️','🏰'],
+ ['#6de2ec','#c8f7ed','#3c9caf','#24768c','🪸','🐠'],
+ ['#ffb39a','#f8d2ae','#aa6556','#793d3d','🔥','🌋'],
+ ['#353c85','#b7b4dc','#7775ba','#484b86','✨','🌙'],
+ ['#ffe1f3','#fff0d9','#ef9cbe','#ca679d','🍭','🧁'],
+ ['#303a78','#aab6d3','#6877a9','#414e85','🪐','🚀'],
+ ['#d5d9aa','#eee2b7','#8c9a6e','#657351','🗿','🌿'],
+ ['#fff0b4','#fff3c6','#e5b64d','#ae7a1e','👑','💎']
+];
+function draw(){const theme=scenery[level];ctx.clearRect(0,0,900,660);
+ const bg=ctx.createLinearGradient(0,0,900,660);bg.addColorStop(0,theme[0]);bg.addColorStop(1,theme[1]);ctx.fillStyle=bg;ctx.fillRect(0,0,900,660);
+ ctx.textAlign='center';ctx.textBaseline='middle';
+ // Subtle patterned paths and beveled walls, with a different visual identity each level.
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+ const px=x*CELL,py=y*CELL,wall=grid[y][x]===1;
+ if(wall){
+ const g=ctx.createLinearGradient(px,py,px,py+CELL);g.addColorStop(0,theme[2]);g.addColorStop(1,theme[3]);ctx.fillStyle=g;ctx.fillRect(px,py,CELL,CELL);
+ ctx.fillStyle='#ffffff32';ctx.fillRect(px+2,py+2,CELL-4,7);
+ ctx.fillStyle='#00000018';ctx.fillRect(px+2,py+CELL-8,CELL-4,6);
+ if(level===7||level===13||level===14){ctx.strokeStyle='#ffffff35';ctx.lineWidth=1.5;ctx.strokeRect(px+5,py+5,CELL-10,CELL-10);ctx.beginPath();ctx.moveTo(px+30,py+5);ctx.lineTo(px+30,py+24);ctx.moveTo(px+5,py+32);ctx.lineTo(px+55,py+32);ctx.stroke()}
+ if((x*19+y*11+level*3)%11===0){ctx.font='24px system-ui';ctx.fillText(theme[4],px+30,py+29)}
+ }else{
+ ctx.fillStyle=(x+y)%2?'#ffffff20':'#6b4b1710';ctx.fillRect(px,py,CELL,CELL);
+ ctx.strokeStyle='#ffffff33';ctx.lineWidth=1;ctx.strokeRect(px+2,py+2,CELL-4,CELL-4);
+ if((x*7+y*17+level*5)%19===0){ctx.font='18px system-ui';ctx.fillText(theme[5],px+30,py+30)}
+ }
+ }
+ // Extra scenery in the border walls, never covering the walkable route.
+ for(let i=0;i<11;i++){const x=1+(i*37+level*13)%13,y=1+(i*19+level*7)%9;if(grid[y][x]===1){ctx.font='30px system-ui';ctx.fillText(i%3?theme[4]:theme[5],(x+.5)*CELL,(y+.5)*CELL)}}
+ if(settings.hint){let path=shortest(player,goal);ctx.strokeStyle='#ffad00d0';ctx.lineWidth=8;ctx.lineCap='round';ctx.setLineDash([7,13]);ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo((p.x+.5)*CELL,(p.y+.5)*CELL):ctx.moveTo((p.x+.5)*CELL,(p.y+.5)*CELL));ctx.stroke();ctx.setLineDash([])}
+ ctx.fillStyle='#fff0a3';ctx.beginPath();ctx.arc((goal.x+.5)*CELL,(goal.y+.5)*CELL,26,0,Math.PI*2);ctx.fill();ctx.font='39px system-ui';ctx.fillText('🚩',(goal.x+.5)*CELL,(goal.y+.5)*CELL);
+ ghosts.forEach(g=>{ctx.font='39px system-ui';ctx.fillText('👻',(g.x+.5)*CELL,(g.y+.5)*CELL)});
+ ctx.fillStyle='#ffffffb0';ctx.beginPath();ctx.arc((player.x+.5)*CELL,(player.y+.5)*CELL,25,0,Math.PI*2);ctx.fill();ctx.font='42px system-ui';ctx.fillText(chars[settings.character][1],(player.x+.5)*CELL,(player.y+.5)*CELL)
+}
 function shortest(a,b){let q=[a],prev=new Map([[a.x+','+a.y,null]]);for(let i=0;i<q.length;i++){let p=q[i];if(p.x===b.x&&p.y===b.y)break;for(let [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){let x=p.x+dx,y=p.y+dy,k=x+','+y;if(free(x,y)&&!prev.has(k)){prev.set(k,p.x+','+p.y);q.push({x,y})}}}let path=[],k=b.x+','+b.y;if(!prev.has(k))return path;while(k){let [x,y]=k.split(',').map(Number);path.unshift({x,y});k=prev.get(k)}return path}
 function move(dx,dy){if(!playing||paused||won)return false;let x=player.x+dx,y=player.y+dy;if(!free(x,y))return false;player={x,y};effect('move');checkCollision();if(player.x===goal.x&&player.y===goal.y)win();draw();return true}
 function checkCollision(){if(ghosts.some(g=>g.x===player.x&&g.y===player.y)){effect('hit');if(settings.collision==='start'){player={x:1,y:1};notify('碰到鬼怪！回到起點，再試一次')}else if(settings.collision==='stay'){paused=true;showModal('👻 碰到鬼怪','休息一下，按 Enter／空白鍵繼續',[['繼續遊戲',()=>{paused=false;hideModal()}]]);}else{hearts--;if(hearts<=0){paused=true;showModal('💛 再試一次','愛心用完了，重新挑戰吧！',[['重新開始',()=>resetLevel()]])}else{player={x:1,y:1};notify('少了一顆愛心，再加油！')}}updateHUD()}}
@@ -56,7 +109,7 @@ function stepToward(target){if(!playing||paused||won||!target||!free(target.x,ta
 canvas.addEventListener('pointerdown',e=>{if(!playing||paused||won)return;initAudio();if(settings.mode==='drag'){dragging=true;canvas.setPointerCapture(e.pointerId);stepToward(pointerCell(e))}else if(settings.mode==='mouse'){mouseTarget=pointerCell(e)}});canvas.addEventListener('pointermove',e=>{if(!playing||paused||won)return;if(settings.mode==='drag'&&dragging){stepToward(pointerCell(e))}if(settings.mode==='mouse'&&e.pointerType==='mouse')mouseTarget=pointerCell(e)});canvas.addEventListener('pointerup',()=>dragging=false);canvas.addEventListener('pointercancel',()=>dragging=false);canvas.addEventListener('pointerleave',()=>{if(settings.mode==='mouse')mouseTarget=null});
 function ghostTick(dt){if(!playing||paused||won)return;const delay=settings.ghostSpeed==='slow'?950:settings.ghostSpeed==='fast'?260:530;ghosts.forEach((g,i)=>{g.clock+=dt;if(g.clock<delay)return;g.clock=0;let opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>free(g.x+dx,g.y+dy)&&!(g.x+dx===1&&g.y+dy===1)&&!(g.x+dx===goal.x&&g.y+dy===goal.y));if(!opts.length)return;let rand=rng(level*991+i*1123+Math.floor(performance.now()/delay));let d=opts[Math.floor(rand()*opts.length)];g.x+=d[0];g.y+=d[1]});checkCollision()}
 let ghostAcc=0,followAcc=0;function frame(now){let dt=Math.min(100,now-lastFrame||16);lastFrame=now;if(playing&&!paused&&!won){ghostAcc+=dt;followAcc+=dt;if(ghostAcc>100){ghostTick(ghostAcc);ghostAcc=0;draw()}let delay=settings.moveSpeed==='slow'?300:settings.moveSpeed==='fast'?85:170;if(followAcc>=delay){if(settings.mode==='keys'&&!settings.step)advanceFromKeys();if(settings.mode==='mouse'&&mouseTarget)stepToward(mouseTarget);followAcc=0}}raf=requestAnimationFrame(frame)}
-$('startBtn').onclick=start;$('restartBtn').onclick=()=>{if(playing)resetLevel();else notify('請先按開始遊戲')};$('nextBtn').onclick=nextLevel;$('pauseBtn').onclick=pause;$('homeBtn').onclick=goHome;$('settingsBtn').onclick=()=>{pressed.clear();$('settingsShade').classList.remove('hidden')};$('closeSettings').onclick=()=>$('settingsShade').classList.add('hidden');$('settingsShade').addEventListener('click',e=>{if(e.target===$('settingsShade'))$('settingsShade').classList.add('hidden')});$('fullBtn').onclick=()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen?.().catch(()=>notify('此裝置不支援全螢幕'));else document.exitFullscreen?.()};$('helpBtn').onclick=()=>showModal('📖 操作說明','鍵盤方向鍵或畫面按鍵控制人物；可切換手指拖曳或滑鼠跟隨。避開鬼怪抵達旗幟。過關後按 Enter／空白鍵進入下一關。R 重新開始、P 暫停、Esc 回選單。',[['知道了',hideModal]]);
+$('startBtn').onclick=start;document.addEventListener('pointerdown',()=>{if(playing&&settings.music&&audio?.state==='suspended')audio.resume()}, {passive:true});$('restartBtn').onclick=()=>{if(playing)resetLevel();else notify('請先按開始遊戲')};$('nextBtn').onclick=nextLevel;$('pauseBtn').onclick=pause;$('homeBtn').onclick=goHome;$('settingsBtn').onclick=()=>{pressed.clear();$('settingsShade').classList.remove('hidden')};$('closeSettings').onclick=()=>$('settingsShade').classList.add('hidden');$('settingsShade').addEventListener('click',e=>{if(e.target===$('settingsShade'))$('settingsShade').classList.add('hidden')});$('fullBtn').onclick=()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen?.().catch(()=>notify('此裝置不支援全螢幕'));else document.exitFullscreen?.()};$('helpBtn').onclick=()=>showModal('📖 操作說明','鍵盤方向鍵或畫面按鍵控制人物；可切換手指拖曳或滑鼠跟隨。避開鬼怪抵達旗幟。過關後按 Enter／空白鍵進入下一關。R 重新開始、P 暫停、Esc 回選單。',[['知道了',hideModal]]);
 function sw(){if(!('serviceWorker'in navigator)||!location.protocol.startsWith('http'))return;navigator.serviceWorker.register('./sw.js').then(reg=>{if(reg.waiting)notify('有新版可用，請重新整理');reg.addEventListener('updatefound',()=>{let w=reg.installing;w?.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){notify('迷宮有新版！請重新整理頁面')}})})}).catch(()=>{})}
 grid=makeMaze(level);placeGhosts();renderChars();renderLevels();renderSettings();updateControls();updateHUD();draw();requestAnimationFrame(frame);sw();
 })();
